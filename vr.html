@@ -1,9 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
   <head>
+    <meta charset="utf-8" />
     <title>Hoop Shoot | XR Blocks</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <link type="text/css" rel="stylesheet" href="https://xrblocks.github.io/css/xr.css" />
+    <style>
+      body { margin: 0; overflow: hidden; background-color: #000; }
+    </style>
     <script>
       window.litDisableBundleWarning = true;
     </script>
@@ -28,16 +32,14 @@
   </head>
 
   <body>
+    <xr-app id="app"></xr-app>
+
     <script type="module">
       import 'xrblocks/addons/simulator/SimulatorAddons.js';
       import * as THREE from 'three';
       import * as xb from 'xrblocks';
       import RAPIER from '@dimforge/rapier3d-simd-compat';
 
-      /**
-       * A basketball-like mini game using Rapier physics.
-       * Pinch or click to shoot a ball.
-       */
       class HoopGame extends xb.Script {
         constructor() {
           super();
@@ -48,20 +50,17 @@
         }
 
         init() {
-          // --- Lighting ---
           this.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2));
           const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
           dirLight.position.set(0, 5, 0);
           this.add(dirLight);
 
-          // --- Floor Visual ---
           const floorGeom = new THREE.PlaneGeometry(20, 20);
           floorGeom.rotateX(-Math.PI / 2);
           const floorMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
           const floorMesh = new THREE.Mesh(floorGeom, floorMat);
           this.add(floorMesh);
 
-          // --- Ring (Hoop) Visual ---
           const torusGeom = new THREE.TorusGeometry(0.4, 0.04, 16, 32);
           torusGeom.rotateX(Math.PI / 2);
           const torusMat = new THREE.MeshPhongMaterial({ color: 0xff3300 });
@@ -69,56 +68,35 @@
           this.torusMesh.position.set(0, 2.0, -2.5);
           this.add(this.torusMesh);
 
-          // --- Backboard Visual ---
           const boardGeom = new THREE.BoxGeometry(1.6, 1.2, 0.1);
-          const boardMat = new THREE.MeshPhongMaterial({ 
-            color: 0xffffff, 
-            transparent: true, 
-            opacity: 0.8 
-          });
+          const boardMat = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
           const boardMesh = new THREE.Mesh(boardGeom, boardMat);
           boardMesh.position.set(0, 2.5, -2.95);
           this.add(boardMesh);
 
-          // --- Pole Visual ---
           const poleGeom = new THREE.CylinderGeometry(0.05, 0.05, 3.0);
           const poleMat = new THREE.MeshPhongMaterial({ color: 0x666666 });
           const poleMesh = new THREE.Mesh(poleGeom, poleMat);
           poleMesh.position.set(0, 1.5, -3.0);
           this.add(poleMesh);
 
-          // --- Score UI Panel ---
-          const panel = new xb.SpatialPanel({
-            width: 1.0, 
-            height: 0.5, 
-            backgroundColor: '#000000bb'
-          });
+          const panel = new xb.SpatialPanel({ width: 1.0, height: 0.5, backgroundColor: '#000000bb' });
           panel.position.set(0, 3.5, -2.9);
           this.add(panel);
           
           const grid = panel.addGrid();
-          this.scoreText = grid.addRow().addText({
-            text: 'SCORE: 0', 
-            fontSize: 0.2, 
-            fontColor: '#00ff00'
-          });
+          this.scoreText = grid.addRow().addText({ text: 'SCORE: 0', fontSize: 0.2, fontColor: '#00ff00' });
         }
 
-        /**
-         * Called by the XR Blocks engine when physics is enabled.
-         * We construct our static colliders here.
-         */
         initPhysics(physics) {
           this.RAPIER = physics.RAPIER;
           this.blendedWorld = physics.blendedWorld;
 
-          // 1. Floor Physics
           const floorDesc = this.RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0);
           const floorBody = this.blendedWorld.createRigidBody(floorDesc);
           const floorCol = this.RAPIER.ColliderDesc.cuboid(10, 0.05, 10).setRestitution(0.8);
           this.blendedWorld.createCollider(floorCol, floorBody);
 
-          // 2. Ring Physics (Trimesh for accurate hole collision)
           const torusGeom = new THREE.TorusGeometry(0.4, 0.04, 16, 32);
           torusGeom.rotateX(Math.PI / 2);
           const vertices = torusGeom.attributes.position.array;
@@ -128,38 +106,29 @@
           const ringCol = this.RAPIER.ColliderDesc.trimesh(vertices, indices);
           this.blendedWorld.createCollider(ringCol, ringBody);
 
-          // 3. Backboard Physics
           const boardDesc = this.RAPIER.RigidBodyDesc.fixed().setTranslation(0, 2.5, -2.95);
           const boardBody = this.blendedWorld.createRigidBody(boardDesc);
           const boardCol = this.RAPIER.ColliderDesc.cuboid(0.8, 0.6, 0.05).setRestitution(0.6);
           this.blendedWorld.createCollider(boardCol, boardBody);
         }
 
-        /**
-         * Triggered when the user pinches (XR) or clicks (Simulator).
-         * Spawns a ball and shoots it forward.
-         */
         onSelectStart(event) {
           if (!this.RAPIER || !this.blendedWorld) return;
-
           const controller = event.target;
           const radius = 0.12; 
           const geom = new THREE.SphereGeometry(radius, 32, 32);
           const mat = new THREE.MeshPhongMaterial({ color: 0xff8800 });
           const mesh = new THREE.Mesh(geom, mat);
           
-          // Initial position at controller/hand
           const pos = new THREE.Vector3().copy(controller.position);
           mesh.position.copy(pos);
           this.add(mesh);
 
-          // Calculate shooting velocity (forward and slightly upward)
           const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(controller.quaternion);
           direction.y += 0.4; 
           direction.normalize();
           const velocity = direction.multiplyScalar(6.5); 
 
-          // Create Physics Body for the Ball
           const bodyDesc = this.RAPIER.RigidBodyDesc.dynamic()
             .setTranslation(pos.x, pos.y, pos.z)
             .setLinvel(velocity.x, velocity.y, velocity.z);
@@ -167,19 +136,9 @@
           const colDesc = this.RAPIER.ColliderDesc.ball(radius).setRestitution(0.75).setMass(0.6);
           this.blendedWorld.createCollider(colDesc, body);
 
-          // Store ball for tracking and cleanup
-          this.balls.push({
-            mesh,
-            body,
-            prevY: pos.y,
-            spawnTime: performance.now(),
-            scored: false
-          });
+          this.balls.push({ mesh, body, prevY: pos.y, spawnTime: performance.now(), scored: false });
         }
 
-        /**
-         * Game loop: synchronize physics & check for goals.
-         */
         update() {
           super.update();
           if (!this.RAPIER || !this.blendedWorld) return;
@@ -190,30 +149,22 @@
             const pos = ball.body.translation();
             const rot = ball.body.rotation();
             
-            // Sync Three.js mesh with Rapier rigid body
             ball.mesh.position.set(pos.x, pos.y, pos.z);
             ball.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
 
-            // --- Goal Detection Logic ---
-            // If ball passes downwards through the Y=2.0 plane inside the hoop radius
             if (!ball.scored && ball.prevY > 2.0 && pos.y <= 2.0) {
-              const dx = pos.x - 0; // Ring center X
-              const dz = pos.z - (-2.5); // Ring center Z
+              const dx = pos.x - 0;
+              const dz = pos.z - (-2.5);
               const distSq = dx * dx + dz * dz;
-              
               if (distSq < 0.28 * 0.28) { 
                 ball.scored = true;
                 this.score++;
-                if (this.scoreText) {
-                  this.scoreText.setText(`SCORE: ${this.score}`);
-                }
-                // Visual feedback: ball turns yellow when scored
+                if (this.scoreText) this.scoreText.setText(`SCORE: ${this.score}`);
                 ball.mesh.material.color.setHex(0xffff00); 
               }
             }
             ball.prevY = pos.y;
 
-            // --- Cleanup Old Balls (after 5 seconds) ---
             if (now - ball.spawnTime > 5000) {
               this.remove(ball.mesh);
               this.blendedWorld.removeRigidBody(ball.body);
@@ -223,19 +174,22 @@
         }
       }
 
-      document.addEventListener('DOMContentLoaded', async () => {
+      // アプリケーションの初期化
+      async function startApp() {
         const options = new xb.Options();
         options.enableUI();
         options.enableHands();
-        
-        // Enable physics and set Rapier engine
         options.physics.RAPIER = RAPIER;
-        
         options.setAppTitle('Hoop Shoot Game');
 
+        // HoopGameをエンジンに追加
         xb.add(new HoopGame());
-        await xb.init(options);
-      });
+        
+        // メインコンテナを指定して初期化
+        await xb.init(options, document.getElementById('app'));
+      }
+
+      startApp();
     </script>
   </body>
 </html>
